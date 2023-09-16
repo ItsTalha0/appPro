@@ -1,5 +1,12 @@
 #include "receiver.h"
 
+/*
+	Changes
+	- Added the function that will create the fd list for polling and then return the pointer to it
+	- 
+*/
+int max_con = 1000; //this is temprory for testing purpose only later to be made dynamic rather than just keeping it a static allocation.
+
 server_info s_info;
 PGconn *connection;
 semlocks sem_lock_datar;
@@ -13,6 +20,24 @@ const struct timespec tm = {
     .tv_sec = 1,
     .tv_nsec = 0L,
 };
+
+void poll_init()
+{
+	
+	struct pollfd *pfd = (struct pollfd*)malloc(max_con*sizeof(struct pollfd));
+
+
+	if( pfd == NULL )
+	{
+		storelog("%s%s","failed to get memory from malloc",strerror(errno));
+	}
+	else
+	{
+	s_info.pfd = pfd;
+	}
+
+}
+
 
 int make_nonblocking (int active_fd) 
 {
@@ -66,46 +91,45 @@ int create_socket ()
 }
 
 
+int add_to_list(int active_fd)							
+{
+	struct pollfd tmp_fd;
+	tmp_fd.fd = active_fd;
+	tmp_fd.events = POLLIN;
+
+	s_info.pfd[s_info.fd_count] = tmp_fd;
+	s_info.fd_count = s_info.fd_count + 1;
+	return 0;
+}
+/* ^^^^^^^^^ the upper given function is replacement of the orignal function add_to_list function.
+	this function adds the active fd to the list of poll fds. The difference between this and the orignal add_to_list is that 
+	here we are adding the fd to the list mannually whereas in the orignal the adding to list part was handled by the system that could 
+	fail, this could also fail but the chances of it failing are quite less as here we are just doing a simple append to a list.
+*/
+/*
 int add_to_list (int active_fd) 
 {
-    /*struct epoll_event event;
-	
+    struct epoll_event event;
  
     memset(&event, 0, sizeof(event)); // set var to zero
     event.data.fd = active_fd; // add a file descriptor
-    event.events = POLLIN | EPOLLET; // epollin to listen for incoming , epollet to specify it as edge triggered
- 	
+    event.events = EPOLLIN | EPOLLET; // epollin to listen for incoming , epollet to specify it as edge triggered
+ 
     // try to add epoll variable to epoll listening list
     if (epoll_ctl(s_info.epoll_fd, EPOLL_CTL_ADD, active_fd, &event) == -1) {
         storelog("%s%s%s%d%s%d", "adding to epoll list failed : ", strerror(errno), " epollfd : ", s_info.epoll_fd, " fd to be added : ", active_fd);
         return -1;
     }
-	*/
-	if( s_info.last_index == MAX_CONN -1 )
-	{
-        storelog("%s%s%s%d%s%d", "adding to epoll list failed , max_Connection limit reached: ", strerror(errno), " epollfd : ",0, " fd to be added : ", active_fd);
-		return -1;
-	}
-	else
-	{
-		memset(&(s_info.pfd[s_info.last_index + 1]),0,sizeof(s_info.pfd[s_info.last_index + 1]));
-		(s_info.pfd[s_info.last_index + 1]).fd = active_fd;
-		(s_info.pfd[s_info.last_index + 1]).events = POLLIN;
-		s_info.last_index = s_info.last_index + 1;
-	}
-
-
-
-
-	
 
     return 0;
 }
+*/
+int remove_from_list( int active_fd)
+{
 
 
 int remove_from_list (int active_fd) 
 {
-	/*
     struct epoll_event event;
 
     memset(&event, 0, sizeof(event)); // set var to zero
@@ -117,24 +141,6 @@ int remove_from_list (int active_fd)
         storelog("%s%s%s%d%s%d", "removing from epoll list failed : ", strerror(errno), " epollfd : ", s_info.epoll_fd, " fd to be removed : ", active_fd);
         return -1;
     }
-	*/
-	int iter=0;
-	while( ((s_info.pfd[iter].fd) != active_fd ) && iter < s_info.last_index )
-	{
-		iter++;
-	}
-	if( iter < MAX_CONN )
-	{
-		s_info.pfd[iter] = s_info.pfd[s_info.last_index];
-		s_info.last_index--;
-	}
-	else
-	{
-		return 0;
-	}
-
-
-
     return 0;
 }
 
@@ -221,8 +227,7 @@ int run_receiver ()
     char key[17];
     int i, message_size, bytes_read, total_bytes_read, status;
     int act_events_cnt = -1;
-	
-    //struct epoll_event events[s_info.maxevents];
+    struct epoll_event events[s_info.maxevents];
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
     newmsg_data nmsg;
@@ -230,11 +235,11 @@ int run_receiver ()
 
     while (1) {
         
-       	// wait till there is activity on any of the descriptors that are under watch
+        // wait till there is activity on any of the descriptors that are under watch
         // timeout is set 1000 ms (= 1 second), as the loop needs to check for any messages from processor
         // for that the loop needs to get out of wait and check the shared memory 
-        //act_events_cnt = epoll_wait(s_info.epoll_fd, events, s_info.maxevents, 1000);
-		act_events_cnt = poll(s_info.pfd,s_info.last_index + 1,-1);
+        act_events_cnt = epoll_wait(s_info.epoll_fd, events, s_info.maxevents, 1000);
+
         // only message the receiver gets from processor is of making a entry in hashtable
         // key is ip address and value is message size that will arrive on that ip
         if (get_message_from_processor(&cpif) != -1) {
@@ -246,27 +251,27 @@ int run_receiver ()
         }
 
         if (act_events_cnt == -1) {
-            storelog("%s%s%s%d", "poll wait failed : ", strerror(errno), " epollfd : ", -1);
+            storelog("%s%s%s%d", "epoll wait failed : ", strerror(errno), " epollfd : ", s_info.epoll_fd);
             return -1;
         }
 
-        for (i = 0; i<=s_info.last_index; i++) {
+        for (i = 0; i<act_events_cnt; i++) {
             
             // if the descripotr show any error or it hang's up then end the connection
-            if (((s_info.pfd[i]).revents & POLLERR) || ((s_info.pfd[i]).revents & POLLHUP) || (!(s_info.pfd[i].revents & POLLIN))) { 
-                if (end_connection(s_info.pfd[i].fd, addr) == -1) { return -1; }  
+            if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN))) { 
+                if (end_connection(events[i].data.fd, addr) == -1) { return -1; }  
                 continue;
             
             }
-            else if (s_info.pfd[i].fd == s_info.servsoc_fd && (s_info.pfd[i].revents & POLLIN)) {
+            else if (events[i].data.fd == s_info.servsoc_fd && (events[i].events & EPOLLIN)) {
                 // receiver is listening for new_connections on s_info.servsoc_fd
-                // POLLIN refers to incoming connection
+                // EPOLLIN refers to incoming connection
                 accept_connection();
             }
-            else if (s_info.pfd[i].revents  & POLLIN) {
+            else if (events[i].events & EPOLLIN) {
             
                 // get ip address using file descriptor
-                getsockname(s_info.pfd[i].fd, (struct sockaddr *) &addr, &addrlen);
+                getsockname(events[i].data.fd, (struct sockaddr *) &addr, &addrlen);
                 memset(key, 0, sizeof(key));
                 sprintf(key, "%d", htonl(addr.sin_addr.s_addr));
                 
@@ -277,7 +282,7 @@ int run_receiver ()
                 if (message_size >= 0) {
     
                     memset(&nmsg, 0, message_size);
-                    nmsg.data1 = s_info.pfd[i].fd;
+                    nmsg.data1 = events[i].data.fd;
                     bytes_read = 0;
                     total_bytes_read = 0;
                     
@@ -300,7 +305,7 @@ int run_receiver ()
                                 
                                 total_bytes_read = 0;
                                 memset(&nmsg, 0, message_size);
-                                nmsg.data1 = s_info.pfd[i].fd;
+                                nmsg.data1 = events[i].data.fd;
                             }
 
                         }
@@ -308,8 +313,8 @@ int run_receiver ()
                 }
                 else {
                     // in case failure to retrive size of message, close the connection
-                    storelog("%s%d%s%d%s%s", "invalid size : ", message_size,  " for fd : ",s_info.pfd[i].fd/* events[i].data.fd*/,  " ip : ", key);
-                    if (end_connection(s_info.pfd[i].fd, addr) == -1) { return -1; }
+                    storelog("%s%d%s%d%s%s", "invalid size : ", message_size,  " for fd : ", events[i].data.fd,  " ip : ", key);
+                    if (end_connection(events[i].data.fd, addr) == -1) { return -1; }
                 }
             }
             
@@ -447,7 +452,6 @@ int prepare_statements ()
 
 int main (int argc, char *argv[]) 
 {
-	s_info.last_index = 0;
     int conffd = -1;
     char buf[500];
     char db_conn_command[100];
@@ -515,13 +519,12 @@ int main (int argc, char *argv[])
         storelog("%s", "receiver failed to listen on port");
         return -1;
     }
- 	/*
+ 
     s_info.epoll_fd = epoll_create1(0); // create epoll instance
     if (s_info.epoll_fd == -2) {
         storelog("%s", "receiver failed to create epoll instance");
         return -1;
     }
-	*/
 
     if (add_to_list(s_info.servsoc_fd) == -1) { return -1; } // add socket file descriptor to epoll list
     
@@ -533,10 +536,9 @@ int main (int argc, char *argv[])
     run_receiver(); // recieve connections, data and communicate with database
  
     PQfinish(connection); // close connection to db
-   /*
+   
     close(s_info.epoll_fd); // close epoll instance
-    */
-	shutdown(s_info.servsoc_fd, 2); // close server socket
+    shutdown(s_info.servsoc_fd, 2); // close server socket
    
     sem_close(sem_lock_commr.var); // unlink lock used for communication
     sem_close(sem_lock_datar.var); // unlink lock used for data sharing

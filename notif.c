@@ -1,14 +1,29 @@
-#include <sys/epoll.h>
+//#include <sys/epoll.h>
+#include<poll.h>
 #include "shared_memory.h"
 #include "partition.h"
 
+
+/*
+	--Changes made so far to the file
+	1.commented the epoll statements.
+	2.added the poll include statement
+	3.declare constructs required by the poll library to funtion.
+	4.made changes to the main algorithm to accomodate the poll.
+*/
+
 int dbsocket;
-int epoll_fd;
+//int epoll_fd;
 char noti_channel[30];
-struct epoll_event event;
+//struct epoll_event event;
 PGconn *connection;
 semlocks sem_lock_sig;
 void storelog(char * fmt, ...);
+
+/* for use with poll on systems where epoll is available*/
+
+struct pollfd pfd;
+
 
 int initnotif(char *confg_filename) 
 {
@@ -74,16 +89,20 @@ int initnotif(char *confg_filename)
     PQsetnonblocking(connection, 1);
 
     // create an epoll instance to check activity on socket
-    epoll_fd = epoll_create1(0);
+    /*
+	epoll_fd = epoll_create1(0);
     if (epoll_fd == -1) {
         storelog("%s%s", "epoll_create1 failed in notifier listening on : ", noti_channel);
         PQfinish(connection);
         return -1;
     }
-
+	
     event.events = EPOLLIN;
     event.data.fd = dbsocket;
-
+	*/
+	pfd.fd = dbsocket;
+	pfd.events = POLLIN;
+	/*
     // add the epoll file descriptor into epoll data structure, internally handeled by kernel
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, dbsocket, &event) == -1) {
         storelog("%s%s", "epollctl failed in notifier listening on : ", noti_channel);
@@ -91,7 +110,7 @@ int initnotif(char *confg_filename)
         close(epoll_fd);
         return -1;
     }
-
+	*/
     PQclear(res);
 
     // execute query to listen on notification channel
@@ -99,7 +118,7 @@ int initnotif(char *confg_filename)
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
         storelog("%s%s%s%s", "noti channel : ", noti_channel, " LISTEN command failed : ", PQerrorMessage(connection));
         PQclear(res);
-        close(epoll_fd);
+        //close(epoll_fd);
         PQfinish(connection);
         return -1;
     }
@@ -108,7 +127,7 @@ int initnotif(char *confg_filename)
     // open semaphore, attach variable to it
     if ((sem_lock_sig.var = sem_open(sem_lock_sig.key, O_CREAT, 0777, 0)) == SEM_FAILED) {
         storelog("%s%s%s%s", "noti channel : ", noti_channel,  " error creating semphore : ", sem_lock_sig.key, PQerrorMessage(connection));
-        close(epoll_fd);
+        //close(epoll_fd);
         PQfinish(connection);
         return -1;
     }
@@ -130,17 +149,49 @@ int main(int argc, char *argv[])
     if(initnotif(argv[1]) == -1) {return -1;}
     
     while (1) {
+		num_events = poll( &pfd,1,-1);
+		//if activity on the intended fd.
+		if( (num_events == 1)&&((pfd.revents & POLLIN) == POLLIN) )  
+		{
+			
+            if (PQconsumeInput(connection) == 0) 
+			{
+                storelog("%s%s%s%s", "noti channel : ", noti_channel ," Failed to consume input : ", PQerrorMessage(connection));
+                break;
+            }
+            else 
+			{
+                // keep reading notifications untill there are none
+                while ((notify = PQnotifies(connection)) != NULL) 
+				{
+                    // incerement the value of semaphore
+                    sem_post(sem_lock_sig.var);
+                    PQfreemem(notify);
+                }
+            }
+		}
+		//something went wrong log in system log.
+		if( num_events == -1 )
+		{
+            storelog("%s%s", "poll wait failed for notifier listening on channel : ", noti_channel);
+		}
+
+	}
+    sem_close(sem_lock_sig.var);
+    PQfinish(connection);
+	return 0;
+}
+
 
         // wait until there is activity on port
+		/*
         num_events = epoll_wait(epoll_fd, &event, 1, -1);
         if (num_events == -1) {
             storelog("%s%s", "epoll wait failed for notifier listening on channel : ", noti_channel);
             break;
         }
-        
         // if activity is from intended socket then proceed
         if (event.data.fd == dbsocket) {
-            
             // check if it can read from socket
             if (PQconsumeInput(connection) == 0) {
                 storelog("%s%s%s%s", "noti channel : ", noti_channel ," Failed to consume input : ", PQerrorMessage(connection));
@@ -160,10 +211,12 @@ int main(int argc, char *argv[])
             break;
         }    
     }
-    
     sem_close(sem_lock_sig.var);
     PQfinish(connection);
     close(epoll_fd);
+	
+
 
     return 0;
 }
+*/

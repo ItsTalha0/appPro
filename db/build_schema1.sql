@@ -360,7 +360,7 @@ BEGIN
 
             uuid_data::text::bytea, '4'::text, 
             (lpad(system_capacity::text, 11, ' ') || (lpad(dataport::text, 11, ' ')) || (lpad(ipaddress::text, 11, ' ')))::bytea ,
-            ''::bytea, system_name::text, destination::text, '5'::text
+            ''::bytea, system_name::text, destination::text, '5'::text, 147
         
         ), '4', 'S-5', system_name, destination, 5, uuid_data, jparent_jobid 
     FROM conn_info_sending;
@@ -447,7 +447,7 @@ BEGIN
         
             uuid_data::text::bytea, '5'::text, 
             ( lpad(data_capacity::text, 11, ' ') || (lpad(dataport::text, 11, ' ')) || (lpad(ipaddress::text, 11, ' ')) )::bytea, 
-            ''::bytea, system_name::text, destination::text, '5'::text
+            ''::bytea, system_name::text, destination::text, '5'::text, 147
         
         ), '5', 'S-5', system_name, destination, 5, uuid_data, jparent_jobid 
     FROM conn_info;
