@@ -1,3 +1,6 @@
+
+
+--Actuall Readme of the project For the changes made please refer the end of the document.--
 This system comprised of different processes is used to send data over network.
 System consists 8 different user processes and a database.
 Processing of data occurs inside database and user processes are used for sending and receiving data over network.
@@ -54,3 +57,8 @@ Messages for consensus formig are sent to S-5 state and are picked up by intial_
 
 For any errors that occur in any of the processes, logs entries are directly made in logs table by that process.
 Any errors that occur before making connection to database are stored in syslog.
+
+
+
+
+
