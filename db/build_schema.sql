@@ -11,6 +11,8 @@ UNLISTEN noti_1receiver;
 UNLISTEN noti_1initialsender;
 
 
+
+--The heart of the operation
 CREATE TABLE job_scheduler (jobid UUID PRIMARY KEY, 
                             jobdata bytea NOT NULL,
                             jstate CHAR(5) NOT NULL DEFAULT 'N-1',
@@ -24,10 +26,12 @@ CREATE TABLE job_scheduler (jobid UUID PRIMARY KEY,
                             jpriority  TEXT NOT NULL DEFAULT '10',
                             jcreation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 
-
+--Dont know what is this rdata1 and rdata2 need to dig deep
 CREATE TABLE receivers_comms (rcomid SERIAL PRIMARY KEY, 
                               rdata1 BIGINT NOT NULL,
                               rdata2 BIGINT NOT NULL);
+
+
 
 CREATE TABLE receiving_conns (rfd INTEGER PRIMARY KEY, 
                               ripaddr BIGINT NOT NULL, 
@@ -71,31 +75,34 @@ CREATE TABLE files (file_id UUID PRIMARY KEY,
 
 
 CREATE OR REPLACE VIEW show_stats 
-AS 
-SELECT count(jstate) AS total_jobs, jstate, jpriority, jdestination, jtype 
-FROM job_scheduler 
-GROUP BY jstate, jpriority, jdestination, jtype;
+	AS 
+	SELECT count(jstate) AS total_jobs, jstate, jpriority, jdestination, jtype 
+		FROM job_scheduler 
+		GROUP BY jstate, jpriority, jdestination, jtype;
 
 
 CREATE OR REPLACE VIEW show_jobs_info AS
-SELECT  js1.jobid, encode(js1.jobdata, 'escape') AS file_name, js1.jstate, js1.jpriority, js1.jdestination 
-FROM job_scheduler js1 
-WHERE js1.jtype = lpad('6', 5, ' ') 
-GROUP BY js1.jobid;
+	SELECT  js1.jobid, encode(js1.jobdata, 'escape') AS file_name, js1.jstate, js1.jpriority, js1.jdestination 
+		FROM job_scheduler js1 
+		WHERE js1.jtype = lpad('6', 5, ' ') 
+		GROUP BY js1.jobid;
 
 CREATE OR REPLACE VIEW show_files_info AS
-SELECT * FROM FILES;
+	SELECT * FROM FILES;
 
+-- comments ending in ?? are assumptions.
+--creates message as in the message to be sent out or the general message layout for the internal functioning.
 CREATE OR REPLACE FUNCTION create_message(
-    uuid_data bytea,
+    uuid_data bytea,			
     message_type text,
     subheader bytea,
-    messaget bytea,
-    message_source text,
-    message_destination text,
+    messaget bytea,				--what is messaget ??
+    message_source text,		--probaly from where the message originated ??
+    message_destination text,	--to where it is going ??
     message_priority text,
-    max_capacity int
-) RETURNS bytea
+    max_capacity int		--max capacity of what ??
+	) 
+	RETURNS bytea
 AS
 $$
 DECLARE   
@@ -165,11 +172,9 @@ WHERE
     jobdata = '__ROOT__';
 
 
-ALTER TABLE 
-    job_scheduler 
-ALTER COLUMN 
-    jparent_jobid
-SET NOT NULL;
+ALTER TABLE job_scheduler 
+	ALTER COLUMN jparent_jobid
+		SET NOT NULL;
 
 
 
