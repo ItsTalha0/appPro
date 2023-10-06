@@ -1,5 +1,0 @@
-1. Make the whole project to be able to run on openbsd.
-2. Change the way we interact the with the project.
-3. Normalise the internal tables.
-4. Check for effciency.
-5. 
