@@ -101,6 +101,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    while( getchar() != 'q' );
+    while( getchar() != 'q' )
+	{}
+
 	return 0;
 }

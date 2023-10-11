@@ -1,30 +1,38 @@
-
-//Epill to pill changes: Reason being No epoll in legacy unix oses.
 #ifndef RECEIVER_H
 #define RECEIVER_H
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <poll.h>
 //#include <sys/epoll.h>
-#include<poll.h>
 #include <stdint.h>
 #include <netinet/in.h>
 #include "partition.h"
 #include "shared_memory.h"
 #include "hashtable.h"
 
-//this defines the maximum number of connections
-#define MAX_CONN 1000
+#define MAX_CONNS 100
 
 
+/*
+//orignal server_info struct.
 typedef struct server_info{
     int port;
     int maxevents;
     int servsoc_fd;
-    //int epoll_fd; //epoll thing.
-	struct pollfd pfd[MAX_CONN];	
+    int epoll_fd;
     unsigned long ipaddress;
-	int last_index;					/*for keeping track of number of fds in list.*/
+}server_info;
+*/
+
+//struct confirming to poll.
+typedef struct server_info{
+    int port;
+    int maxevents;
+    int servsoc_fd;
+    struct pollfd pfd[MAX_CONNS];
+	int in_list;
+    unsigned long ipaddress;
 }server_info;
 
 typedef struct db_statements {
@@ -43,6 +51,7 @@ db_statements dbs[statement_count] = {
       .param_count = 1
     }
 };
+
 
 int connect_to_database();
 int prepare_statements();
